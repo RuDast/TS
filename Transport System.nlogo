@@ -1,9 +1,128 @@
+breed [cars car]
+breed [buses bus]
+breed [traffic_lights traffic_light]
 
+cars-own
+[
+  speed_
+  ;;max_speed_
+]
+
+buses-own
+[
+  speed_
+  ;;max_speed_
+]
+
+traffic_lights-own
+[
+  timer_
+  color_
+]
+
+patches-own [is-road? is-intersection? has-stop?]
+
+to setup-roads
+  ask patches [
+    set is-road? false
+    set is-intersection? false
+    set pcolor green  ;; фон — трава
+  ]
+
+  let vertical-streets [-10 0 10]    ;; x-координаты вертикальных улиц
+  let horizontal-streets [-10 0 10]  ;; y-координаты горизонтальных улиц
+
+  ;; рисуем вертикальные улицы
+  foreach vertical-streets [
+    x ->
+    ask patches with [abs (pxcor - x) <= 1] [  ;; ширина улицы = 3 клетки
+      set pcolor black
+      set is-road? true
+    ]
+  ]
+
+  ;; рисуем горизонтальные улицы
+  foreach horizontal-streets [
+    y ->
+    ask patches with [abs (pycor - y) <= 1] [  ;; ширина улицы = 3 клетки
+      set pcolor black
+      set is-road? true
+    ]
+  ]
+
+  ;; отмечаем перекрёстки
+  foreach vertical-streets [
+    x ->
+    foreach horizontal-streets [
+      y ->
+      ask patch x y [
+        set pcolor white
+        set is-intersection? true
+      ]
+    ]
+  ]
+end
+
+to setup-cars
+  create-cars 8 [
+    setxy random-xcor random-ycor
+    set speed_ 10
+    set size 2
+    set color blue
+  ]
+end
+
+to setup-buses
+  create-buses 3 [
+    setxy random-xcor random-ycor
+    set speed_ 6
+    set size 2.5
+    set color yellow
+  ]
+end
+
+to setup-traffic_lights
+  ask patches with [is-intersection?] [
+    sprout-traffic_lights 1 [
+      set color green
+      set color_ "green"
+      set timer_ 0
+    ]
+  ]
+end
+
+to setup
+  clear-all
+  setup-buses
+  setup-cars
+  setup-roads
+  setup-traffic_lights
+end
+
+to update-traffic_lights
+  ask traffic_lights [
+    set timer_ timer_ + 1
+    if timer_ > 700 [
+      if color_ = "green" [
+        set color red
+        set color_ "red"
+      ] if color_ = "red" [
+        set color green
+        set color_ "green"
+      ]
+      set timer_ 0
+    ]
+  ]
+end
+
+to go
+  update-traffic_lights
+end
 @#$#@#$#@
 GRAPHICS-WINDOW
-210
+9
 10
-647
+446
 448
 -1
 -1
@@ -26,6 +145,40 @@ GRAPHICS-WINDOW
 1
 ticks
 30.0
+
+BUTTON
+484
+13
+547
+46
+GO!
+go
+T
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
+
+BUTTON
+582
+14
+645
+47
+Setup
+setup
+NIL
+1
+T
+OBSERVER
+NIL
+NIL
+NIL
+NIL
+1
 
 @#$#@#$#@
 ## WHAT IS IT?
