@@ -69,7 +69,7 @@ to setup-cars
     setxy random-xcor random-ycor
     set speed_ 10
     set size 2
-    set  0
+    set wait_time 0
     set color blue
   ]
 end

@@ -5,13 +5,14 @@ breed [traffic_lights traffic_light]
 cars-own
 [
   speed_
-  ;;max_speed_
+  max_speed_
+  wait_time
 ]
 
 buses-own
 [
   speed_
-  ;;max_speed_
+  max_speed_
 ]
 
 traffic_lights-own
@@ -68,6 +69,7 @@ to setup-cars
     setxy random-xcor random-ycor
     set speed_ 10
     set size 2
+    set wait_time 0
     set color blue
   ]
 end
@@ -83,13 +85,47 @@ end
 
 to setup-traffic_lights
   ask patches with [is-intersection?] [
-    sprout-traffic_lights 1 [
-      set color green
-      set color_ "green"
-      set timer_ 0
+    let x pxcor
+    let y pycor
+
+    ask patch x (y + 1) [
+      sprout-traffic_lights 1 [
+        set color green
+        set color_ "green"
+        set timer_ random light_slider
+        set heading 180
+      ]
+    ]
+
+    ask patch x (y - 1) [
+      sprout-traffic_lights 1 [
+        set color green
+        set color_ "green"
+        set timer_ random light_slider
+        set heading 0
+      ]
+    ]
+
+    ask patch (x + 1) y [
+      sprout-traffic_lights 1 [
+        set color green
+        set color_ "green"
+        set timer_ random light_slider
+        set heading 270
+      ]
+    ]
+
+    ask patch (x - 1) y [
+      sprout-traffic_lights 1 [
+        set color green
+        set color_ "green"
+        set timer_ random light_slider
+        set heading 90
+      ]
     ]
   ]
 end
+
 
 to setup
   clear-all
@@ -97,16 +133,17 @@ to setup
   setup-cars
   setup-roads
   setup-traffic_lights
+  reset-ticks
 end
 
 to update-traffic_lights
   ask traffic_lights [
     set timer_ timer_ + 1
-    if timer_ > 700 [
-      if color_ = "green" [
+    if timer_ > light_slider [
+      ifelse color_ = "green" [
         set color red
         set color_ "red"
-      ] if color_ = "red" [
+      ] [
         set color green
         set color_ "green"
       ]
@@ -115,8 +152,19 @@ to update-traffic_lights
   ]
 end
 
+to update-cars
+  ask cars [
+    if pcolor = red [
+      set wait_time wait_time + 1
+      stop
+    ]
+  ]
+end
+
 to go
   update-traffic_lights
+  update-cars
+  tick
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
@@ -179,6 +227,21 @@ NIL
 NIL
 NIL
 1
+
+SLIDER
+484
+62
+656
+95
+light_slider
+light_slider
+100000
+1000000
+100000.0
+100000
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
