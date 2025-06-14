@@ -17,52 +17,17 @@ buses-own
 
 traffic_lights-own
 [
-  timer_
-  color_
+]
+
+globals [
+  vertical-light-color
+  horizontal-light-color
+  light-timer
 ]
 
 patches-own [is-road? is-intersection? has-stop?]
 
-to setup-roads
-  ask patches [
-    set is-road? false
-    set is-intersection? false
-    set pcolor green  ;; фон — трава
-  ]
 
-  let vertical-streets [-10 0 10]    ;; x-координаты вертикальных улиц
-  let horizontal-streets [-10 0 10]  ;; y-координаты горизонтальных улиц
-
-  ;; рисуем вертикальные улицы
-  foreach vertical-streets [
-    x ->
-    ask patches with [abs (pxcor - x) <= 1] [  ;; ширина улицы = 3 клетки
-      set pcolor black
-      set is-road? true
-    ]
-  ]
-
-  ;; рисуем горизонтальные улицы
-  foreach horizontal-streets [
-    y ->
-    ask patches with [abs (pycor - y) <= 1] [  ;; ширина улицы = 3 клетки
-      set pcolor black
-      set is-road? true
-    ]
-  ]
-
-  ;; отмечаем перекрёстки
-  foreach vertical-streets [
-    x ->
-    foreach horizontal-streets [
-      y ->
-      ask patch x y [
-        set pcolor white
-        set is-intersection? true
-      ]
-    ]
-  ]
-end
 
 to setup-cars
   create-cars 8 [
@@ -90,37 +55,33 @@ to setup-traffic_lights
 
     ask patch x (y + 1) [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 180
+        set heading 180  ;; смотрит вниз
+        set shape "circle"
+        set size 1
       ]
     ]
 
     ask patch x (y - 1) [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 0
+        set heading 0  ;; смотрит вверх
+        set shape "circle"
+        set size 1
       ]
     ]
 
     ask patch (x + 1) y [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 270
+        set heading 270  ;; смотрит влево
+        set shape "circle"
+        set size 1
       ]
     ]
 
     ask patch (x - 1) y [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 90
+        set heading 90  ;; смотрит вправо
+        set shape "circle"
+        set size 1
       ]
     ]
   ]
@@ -129,49 +90,59 @@ end
 
 to setup
   clear-all
-  setup-buses
-  setup-cars
   setup-roads
   setup-traffic_lights
+  setup-buses
+  setup-cars
+  set vertical-light-color "green"
+  set horizontal-light-color "red"
+  set light-timer 0
   reset-ticks
 end
 
 to update-traffic_lights
+  set light-timer light-timer + 1
+  if light-timer > light_slider [
+    ifelse vertical-light-color = "green" [
+      set vertical-light-color "red"
+      set horizontal-light-color "green"
+    ] [
+      set vertical-light-color "green"
+      set horizontal-light-color "red"
+    ]
+    set light-timer 0
+  ]
+
+
   ask traffic_lights [
-    set timer_ timer_ + 1
-    if timer_ > light_slider [
-      ifelse color_ = "green" [
-        set color red
-        set color_ "red"
-      ] [
+    if heading = 0 or heading = 180 [
+      ifelse vertical-light-color = "green" [
         set color green
-        set color_ "green"
+      ] [
+        set color red
       ]
-      set timer_ 0
+    ]
+    if heading = 90 or heading = 270 [
+      ifelse horizontal-light-color = "green" [
+        set color green
+      ] [
+        set color red
+      ]
     ]
   ]
 end
 
-to update-cars
-  ask cars [
-    if pcolor = red [
-      set wait_time wait_time + 1
-      stop
-    ]
-  ]
-end
 
 to go
   update-traffic_lights
-  update-cars
   tick
 end
 @#$#@#$#@
 GRAPHICS-WINDOW
 9
 10
+444
 446
-448
 -1
 -1
 13.0
