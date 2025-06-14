@@ -8,6 +8,7 @@ breed [ traffic_lights  traffic_light ]
 cars-own [
   wait_time                    ;; сколько тиков простояли
   stripe                       ;; смещение в полосе (-2 … +2)
+  turn
 ]
 
 patches-own [
@@ -74,7 +75,7 @@ end
 ;;; 4.  Закрываем 24 участ-ка дорог
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to block-some-roads
-  let num-blocks 24
+  let num-blocks 11
   let centres patches with [
         is-road? and
         not is-intersection? and
@@ -131,7 +132,7 @@ end
 ;;; 5.  Зелёная «стена» шириной 12 патчей
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to make-border
-  let border-width 12
+  let border-width 5 + green-size
   ask patches with [
         pxcor <= min-pxcor + border-width - 1 or
         pxcor >= max-pxcor - border-width + 1 or
@@ -172,33 +173,42 @@ to make-tl [ x y dir ]
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 7.  Машины: спавн строго в две «правые» полосы
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to-report choose-turn
+  let r random 100
+  if      r < 40  [ report "straight" ]
+  if r >= 40 and r < 70 [ report "left"     ]
+  report "right"
+end
+
+;;; -----------------------------------------------------------------
+;;;  Спавн машин: строго 40 шт., только на дороге, в двух правых полосах
+;;; -----------------------------------------------------------------
 to setup-cars
-  ;; 1) убираем только прежние машины, не трогаем светофоры и автобусы
+  ;; 1) Удаляем прежние машины (не трогаем автобусы и светофоры)
   ask cars [ die ]
 
-  let need 40                                   ;; желаемое количество
-  let cols floor (world-width  / period)
-  let rows floor (world-height / period)
+  let target 40                              ;; нужно столько машин
+  let cols  floor (world-width  / period)
+  let rows  floor (world-height / period)
 
-  while [ count cars < need ] [
-    ;; создаём ОДНУ машину и убедимся, что она стоит на дороге
+  ;; 2) Создаём, пока не наберём target
+  while [ count cars < target ] [
+
+    ;; эта часть выполняется OBSERVER-ом
     create-cars 1 [
 
-      ;; ---------------- направление + координаты ----------------
-      ifelse random 2 = 0 [
+      ;; ---------- выбираем дорогу и изначальный heading ----------
+      ifelse (random 2 = 0) [
         ;; ВЕРТИКАЛЬ
         let c   random cols
         let bx  (min-pxcor + period * c) + stripe-index
 
         ifelse random 2 = 0 [
           set heading 0
-          set stripe  one-of [1 2]
+          set stripe  one-of [ 1 2 ]          ;; +1  +2
         ] [
           set heading 180
-          set stripe  (0 - (one-of [1 2]))
+          set stripe  (0 - (one-of [ 1 2 ]))  ;; -1  -2
         ]
         setxy (bx + stripe) (min-pycor + random world-height)
       ] [
@@ -208,26 +218,28 @@ to setup-cars
 
         ifelse random 2 = 0 [
           set heading 90
-          set stripe  (0 - (one-of [1 2]))
+          set stripe  (0 - (one-of [ 1 2 ]))  ;; -1  -2
         ] [
           set heading 270
-          set stripe  one-of [1 2]
+          set stripe  one-of [ 1 2 ]          ;; +1  +2
         ]
         setxy (min-pxcor + random world-width) (by + stripe)
       ]
 
-      ;; базовые свойства
+      ;; ---------- базовые атрибуты ----------
       set wait_time 0
       set color     blue
       set size      2
+      set turn      "none"
 
-      ;; ---------------- проверка: стоим ли НА ДОРОГЕ? -------------
+      ;; ---------- проверка: мы на дороге? ----------
       if not ([is-road?] of patch-here and not [is-intersection?] of patch-here) [
-        die                                           ;; рамка или трава → удалить
+        die
       ]
     ]
   ]
 end
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; 8.  Автобусы (декорация)
@@ -272,23 +284,80 @@ end
 to update-cars
   ask cars [
 
-    ;; 1. патч впереди
-    let ahead patch-ahead 1
-    if not [is-road?] of ahead [ stop ]
-
-    ;; 2. красный свет?
-    let sig one-of traffic_lights with [
-      distance myself < 7 and abs([heading] of myself - heading) < 10
-    ]
-    if (sig != nobody and [color] of sig = red) [
-      set wait_time wait_time + 1
+    ;; ─── 0.  конец дороги прямо перед машиной ───
+    if not [is-road?] of patch-ahead 1 [
       stop
     ]
 
-    ;; 3. едем
+    ;; ─── 1.  МЫ УЖЕ НА ПЕРЕКРЁСТКЕ ───
+    if [is-intersection?] of patch-here [
+
+      ;; выполняем поворот, если он ещё не сделан
+      if turn != "none" and turn != "straight" [
+
+        let old-h heading
+        if turn = "right" [ rt 90 ]
+        if turn = "left"  [ lt 90 ]
+
+        ;; ── выбираем новую полосу ──
+        let stripe-abs  (ifelse-value turn = "right" [ 1 ] [ 2 ])
+        ;;   правые полосы →  sign = +1 (для heading 0 и 270)
+        ;;   левые  полосы →  sign = -1 (для heading 90 и 180)
+        let stripe-sign (ifelse-value (member? (round heading) [0 270]) [ 1 ] [ -1 ])
+        set stripe (stripe-abs * stripe-sign)
+
+        ;; ── смещаем поперёк нового направления ──
+        let px round xcor
+        let py round ycor
+        ifelse member? old-h [0 180] [
+  ;; ехали по вертикали → после поворота горизонталь
+  set ycor py + stripe
+] [
+  ;; ехали по горизонтали → после поворота вертикаль
+  set xcor px + stripe
+]
+
+
+        set turn "none"
+      ]
+
+      ;; на перекрёстке едем медленнее
+      fd (speed-slider * 0.5)
+      stop
+    ]
+
+
+    ;; ─── 2.  Стоим ли перед перекрёстком (patch-ahead = intersection) ? ───
+    let stop-line? [is-intersection?] of patch-ahead 1
+    if stop-line? [
+
+      ;; свой светофор (фонарь «смотрит» на нас)
+      let sig one-of traffic_lights with [
+        heading = [heading] of myself and distance myself <= 4
+      ]
+
+      ;; красный → ждём
+      if sig != nobody and [color] of sig = red [
+        set wait_time wait_time + 1
+        stop
+      ]
+
+      ;; зелёный → если манёвр не выбран, выбираем
+      if turn = "none" [
+        let ch choose-turn
+        set turn ch
+      ]
+    ]
+
+
+    ;; ─── 3.  обычное движение ───
     fd speed-slider
   ]
 end
+
+
+
+
 
 ;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 ;;; 11.  SETUP и GO
@@ -297,7 +366,7 @@ to setup
   clear-all
 
   ;; геометрия
-  set green-size   7
+  set green-size   16
   set road-width   5
   set period       (green-size + road-width)
   set stripe-index 2
@@ -326,8 +395,8 @@ end
 GRAPHICS-WINDOW
 0
 15
-1190
-1206
+1166
+1182
 -1
 -1
 6.0
@@ -340,10 +409,10 @@ GRAPHICS-WINDOW
 1
 1
 1
--98
-98
--98
-98
+-96
+96
+-96
+96
 0
 0
 1
@@ -415,7 +484,7 @@ speed-slider
 speed-slider
 0.001
 0.02
-0.007
+0.001
 0.001
 1
 NIL
@@ -428,10 +497,10 @@ SLIDER
 278
 light-slider
 light-slider
-1000
-15000
-3000.0
-1000
+10000
+100000
+50000.0
+10000
 1
 NIL
 HORIZONTAL
