@@ -18,51 +18,57 @@ buses-own
 traffic_lights-own
 [
   timer_
-  color_
+  state_     ;; "NS-green"  или  "EW-green"
 ]
 
 patches-own [is-road? is-intersection? has-stop?]
 
 to setup-roads
   ask patches [
-    set is-road? false
+    set is-road?         false
     set is-intersection? false
-    set pcolor green  ;; фон — трава
+    set pcolor           green        ;; фон — трава
   ]
 
-  let vertical-streets [-10 0 10]    ;; x-координаты вертикальных улиц
-  let horizontal-streets [-10 0 10]  ;; y-координаты горизонтальных улиц
+  ;; параметры «шахматки» города
+  let green-size   7                  ;; 7×7 — квартал зелени
+  let road-width   5                  ;; 2 + 1 + 2 (полоса + разметка + полоса)
+  let period       (green-size + road-width)
+  let stripe-index 2                  ;; центральная полоса (0…4)
 
-  ;; рисуем вертикальные улицы
-  foreach vertical-streets [
-    x ->
-    ask patches with [abs (pxcor - x) <= 1] [  ;; ширина улицы = 3 клетки
-      set pcolor black
+  ask patches [
+    ;; «положительный модуль», чтобы работало и при отрицательных координатах
+    let mx (pxcor - min-pxcor) mod period
+    let my (pycor - min-pycor) mod period
+
+    let vertical?   (mx < road-width)
+    let horizontal? (my < road-width)
+
+    ;; сами дороги
+    if vertical? or horizontal? [
       set is-road? true
+      set pcolor  gray + 2            ;; светло-серая дорога
     ]
-  ]
 
-  ;; рисуем горизонтальные улицы
-  foreach horizontal-streets [
-    y ->
-    ask patches with [abs (pycor - y) <= 1] [  ;; ширина улицы = 3 клетки
-      set pcolor black
-      set is-road? true
+    ;; перекрёсток 5×5
+    if vertical? and horizontal? [
+      set is-intersection? true
     ]
-  ]
 
-  ;; отмечаем перекрёстки
-  foreach vertical-streets [
-    x ->
-    foreach horizontal-streets [
-      y ->
-      ask patch x y [
-        set pcolor white
-        set is-intersection? true
+    ;; ─── центральная прерывистая разметка ───
+    if not is-intersection? [
+      ;; вертикальная дорога
+      if vertical? and mx = stripe-index [
+        if (abs pycor) mod 2 = 0 [ set pcolor white ]
+      ]
+      ;; горизонтальная дорога
+      if horizontal? and my = stripe-index [
+        if (abs pxcor) mod 2 = 0 [ set pcolor white ]
       ]
     ]
   ]
 end
+
 
 to setup-cars
   create-cars 8 [
@@ -84,71 +90,74 @@ to setup-buses
 end
 
 to setup-traffic_lights
-  ask patches with [is-intersection?] [
+  ;; параметры сетки (те же, что в setup-roads)
+  let green-size   7
+  let road-width   5
+  let period       (green-size + road-width)
+  let stripe-index 2                     ;; центральная клетка дороги (0…4)
+
+  ;; выбираем ТОЛЬКО центральный патч каждого перекрёстка
+  ask patches with [
+        is-intersection? and
+        ((pxcor - min-pxcor) mod period = stripe-index) and
+        ((pycor - min-pycor) mod period = stripe-index)
+  ] [
     let x pxcor
     let y pycor
 
+    ;; север
     ask patch x (y + 1) [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 180
-      ]
-    ]
-
-    ask patch x (y - 1) [
-      sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
+        set shape "circle"
+        set size 1.2
         set heading 0
       ]
     ]
-
-    ask patch (x + 1) y [
+    ;; юг
+    ask patch x (y - 1) [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 270
+        set shape "circle"
+        set size 1.2
+        set heading 180
       ]
     ]
-
+    ;; восток
+    ask patch (x + 1) y [
+      sprout-traffic_lights 1 [
+        set shape "circle"
+        set size 1.2
+        set heading 90
+      ]
+    ]
+    ;; запад
     ask patch (x - 1) y [
       sprout-traffic_lights 1 [
-        set color green
-        set color_ "green"
-        set timer_ random light_slider
-        set heading 90
+        set shape "circle"
+        set size 1.2
+        set heading 270
       ]
     ]
   ]
 end
 
-
 to setup
   clear-all
+  setup-roads
   setup-buses
   setup-cars
-  setup-roads
   setup-traffic_lights
   reset-ticks
 end
 
 to update-traffic_lights
-  ask traffic_lights [
-    set timer_ timer_ + 1
-    if timer_ > light_slider [
-      ifelse color_ = "green" [
-        set color red
-        set color_ "red"
-      ] [
-        set color green
-        set color_ "green"
-      ]
-      set timer_ 0
-    ]
+  let phase-green-ns? (ticks mod (2 * light_slider)) < light_slider
+  ;; если phase-green-ns? = true  →  «север-юг» зелёные, «восток-запад» красные
+  ifelse phase-green-ns? [
+    ask traffic_lights with [heading = 0 or heading = 180] [ set color green ]
+    ask traffic_lights with [heading = 90 or heading = 270] [ set color red   ]
+  ] [
+    ask traffic_lights with [heading = 0 or heading = 180] [ set color red   ]
+    ask traffic_lights with [heading = 90 or heading = 270] [ set color green ]
   ]
 end
 
@@ -170,11 +179,11 @@ end
 GRAPHICS-WINDOW
 9
 10
-446
-448
+821
+823
 -1
 -1
-13.0
+4.0
 1
 10
 1
@@ -184,10 +193,10 @@ GRAPHICS-WINDOW
 1
 1
 1
--16
-16
--16
-16
+-100
+100
+-100
+100
 0
 0
 1
@@ -237,7 +246,7 @@ light_slider
 light_slider
 100000
 1000000
-100000.0
+600000.0
 100000
 1
 NIL
