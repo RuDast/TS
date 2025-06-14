@@ -1,21 +1,27 @@
-breed [cars car]
-breed [buses bus]
-breed [traffic_lights traffic_light]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 1.  Breeds и «собственные» переменные
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+breed [ cars            car ]
+breed [ buses           bus ]
+breed [ traffic_lights  traffic_light ]
 
 cars-own [
-  wait_time         ;; время ожидания на красный
-  turn-chosen?      ;; флаг, что направление уже выбрано
-  turn-angle        ;; угол поворота:  90 или -90
-  turn-steps        ;; сколько “шагов” до поворота
-  stripe            ;; смещение внутри полосы
+  wait_time                    ;; сколько тиков простояли
+  stripe                       ;; смещение в полосе (-2 … +2)
 ]
 
-buses-own [
-  ;; автобусы без логики скорости
+patches-own [
+  is-road?
+  is-intersection?
 ]
 
-traffic_lights-own []
+buses-own           [ ]
+traffic_lights-own  [ ]
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 2.  globals  (speed-slider / light-slider НЕ пишем -
+;;;               они создаются самими слайдерами)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 globals [
   vertical-light-color
   horizontal-light-color
@@ -25,198 +31,207 @@ globals [
   road-width
   period
   stripe-index
-
-  speed-slider     ;; скорость машин (должен соответствовать имени слайдера)
-  light-slider     ;; длительность одной фазы светофора (имя слайдера)
 ]
 
-patches-own [
-  is-road?
-  is-intersection?
-]
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 3.  Сетка дорог 5 × 5
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup-roads
   ask patches [
+    set pcolor           green
     set is-road?         false
     set is-intersection? false
-    set pcolor           green
   ]
+
   ask patches [
     let mx (pxcor - min-pxcor) mod period
     let my (pycor - min-pycor) mod period
+
     let vertical?   (mx < road-width)
     let horizontal? (my < road-width)
-    ifelse (vertical? or horizontal?) [
+
+    if vertical? or horizontal? [
       set is-road? true
-      set pcolor gray + 2
-    ] [
-      set pcolor green
+      set pcolor   gray + 2
     ]
-    ifelse (vertical? and horizontal?) [
+
+    if vertical? and horizontal? [
       set is-intersection? true
-    ] [
-      ;; не перекрёсток
     ]
-    ifelse not is-intersection? [
-      ifelse (vertical? and mx = stripe-index) [
-        ifelse (abs pycor) mod 2 = 0 [
-          set pcolor white
-        ] [
-          ;; else
-        ]
-      ] [
-        ;; else
+
+    if not is-intersection? [
+      if vertical? and mx = stripe-index [
+        if (abs pycor) mod 2 = 0 [ set pcolor white ]
       ]
-      ifelse (horizontal? and my = stripe-index) [
-        ifelse (abs pxcor) mod 2 = 0 [
-          set pcolor white
-        ] [
-          ;; else
-        ]
-      ] [
-        ;; else
+      if horizontal? and my = stripe-index [
+        if (abs pxcor) mod 2 = 0 [ set pcolor white ]
       ]
-    ] [
-      ;; внутри перекрёстка — полосы не рисуем
     ]
   ]
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 4.  Закрываем 24 участ-ка дорог
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to block-some-roads
   let num-blocks 24
-  ;; центральные клетки сегментов между перекрёстками
   let centres patches with [
         is-road? and
         not is-intersection? and
-        ( (pxcor - min-pxcor) mod period = stripe-index or
+        ( (pxcor - min-pxcor) mod period = stripe-index  or
           (pycor - min-pxcor) mod period = stripe-index )
   ]
 
   let chosen n-of (min list num-blocks count centres) centres
 
   ask chosen [
+    let vertical? ((pxcor - min-pxcor) mod period = stripe-index)
 
-    let vertical? ( (pxcor - min-pxcor) mod period = stripe-index )
-
-    ;; ─────────────────── В Е Р Т И К А Л Ь ───────────────────
     if vertical? [
-      let x0       pxcor - stripe-index                  ;; левый край дороги
-
-      ;; вершина / низ – последний не-перекрёсточный ряд
+      let x0       pxcor - stripe-index
       let y-top    pycor
-      while [ not [ is-intersection? ] of patch pxcor (y-top + 1) ] [
-        set y-top y-top + 1
-      ]
-      let y-bottom pycor
-      while [ not [ is-intersection? ] of patch pxcor (y-bottom - 1) ] [
-        set y-bottom y-bottom - 1
-      ]
+      while [ not [is-intersection?] of patch pxcor (y-top + 1) ] [
+        set y-top y-top + 1 ]
+      let y-bot    pycor
+      while [ not [is-intersection?] of patch pxcor (y-bot - 1) ] [
+        set y-bot y-bot - 1 ]
 
-      ;; ВАЖНО: >=  и <=  (включаем граничные ряды!)
       ask patches with [
-            pxcor >= x0                and pxcor <  x0 + road-width and
-            pycor >= y-bottom          and pycor <= y-top           and
-            is-road?                   and not is-intersection?
+            pxcor >= x0 and pxcor < x0 + road-width and
+            pycor >= y-bot and pycor <= y-top and
+            is-road? and not is-intersection?
       ] [
         set is-road? false
-        set pcolor  green
+        set pcolor   green
       ]
     ]
 
-    ;; ───────────────── Г О Р И З О Н Т А Л Ь ─────────────────
     if not vertical? [
-      let y0       pycor - stripe-index                  ;; нижний край дороги
-
-      let x-right  pxcor
-      while [ not [ is-intersection? ] of patch (x-right + 1) pycor ] [
-        set x-right x-right + 1
-      ]
-      let x-left   pxcor
-      while [ not [ is-intersection? ] of patch (x-left - 1) pycor ] [
-        set x-left x-left - 1
-      ]
+      let y0       pycor - stripe-index
+      let x-r      pxcor
+      while [ not [is-intersection?] of patch (x-r + 1) pycor ] [
+        set x-r x-r + 1 ]
+      let x-l      pxcor
+      while [ not [is-intersection?] of patch (x-l - 1) pycor ] [
+        set x-l x-l - 1 ]
 
       ask patches with [
-            pycor >= y0                and pycor <  y0 + road-width and
-            pxcor >= x-left            and pxcor <= x-right         and
-            is-road?                   and not is-intersection?
+            pycor >= y0 and pycor < y0 + road-width and
+            pxcor >= x-l and pxcor <= x-r and
+            is-road? and not is-intersection?
       ] [
         set is-road? false
-        set pcolor  green
+        set pcolor   green
       ]
     ]
   ]
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 5.  Зелёная «стена» шириной 12 патчей
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to make-border
   let border-width 12
-  ;; все патчи, которые лежат в «рамке» шириной border-width
   ask patches with [
-        pxcor <= (min-pxcor + border-width - 1) or
-        pxcor >= (max-pxcor - border-width + 1) or
-        pycor <= (min-pycor + border-width - 1) or
-        pycor >= (max-pycor - border-width + 1)
+        pxcor <= min-pxcor + border-width - 1 or
+        pxcor >= max-pxcor - border-width + 1 or
+        pycor <= min-pycor + border-width - 1 or
+        pycor >= max-pycor - border-width + 1
   ] [
-    ;; это больше не дорога и не перекрёсток
     set is-road?         false
     set is-intersection? false
-
-    ;; перекрашиваем в траву
-    set pcolor green
+    set pcolor           green
   ]
 end
 
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 6.  Светофоры (по одному на каждую сторону перекр.)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to setup-traffic-lights
+  ask patches with [
+        is-intersection? and
+        ((pxcor - min-pxcor) mod period = stripe-index) and
+        ((pycor - min-pycor) mod period = stripe-index)
+  ] [
+    let cx pxcor
+    let cy pycor
+    make-tl cx (cy + 1) 0
+    make-tl cx (cy - 1) 180
+    make-tl (cx + 1) cy 90
+    make-tl (cx - 1) cy 270
+  ]
+end
+
+to make-tl [ x y dir ]
+  ask patch x y [
+    sprout-traffic_lights 1 [
+      set shape   "circle"
+      set size    1.2
+      set heading dir
+    ]
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 7.  Машины: спавн строго в две «правые» полосы
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup-cars
-  let n    40
+  ;; 1) убираем только прежние машины, не трогаем светофоры и автобусы
+  ask cars [ die ]
+
+  let need 40                                   ;; желаемое количество
   let cols floor (world-width  / period)
   let rows floor (world-height / period)
 
-  create-cars n [
-    let lane 0
-    let x0   0
-    let y0   0
+  while [ count cars < need ] [
+    ;; создаём ОДНУ машину и убедимся, что она стоит на дороге
+    create-cars 1 [
 
-    ifelse random 2 = 0 [
-      ;; вертикальный трафик
-      let r  random rows
-      let bx min-pxcor + period * r
+      ;; ---------------- направление + координаты ----------------
       ifelse random 2 = 0 [
-        set heading 0
-        set lane    stripe-index + 1
+        ;; ВЕРТИКАЛЬ
+        let c   random cols
+        let bx  (min-pxcor + period * c) + stripe-index
+
+        ifelse random 2 = 0 [
+          set heading 0
+          set stripe  one-of [1 2]
+        ] [
+          set heading 180
+          set stripe  (0 - (one-of [1 2]))
+        ]
+        setxy (bx + stripe) (min-pycor + random world-height)
       ] [
-        set heading 180
-        set lane    stripe-index - 1
+        ;; ГОРИЗОНТАЛЬ
+        let r   random rows
+        let by  (min-pycor + period * r) + stripe-index
+
+        ifelse random 2 = 0 [
+          set heading 90
+          set stripe  (0 - (one-of [1 2]))
+        ] [
+          set heading 270
+          set stripe  one-of [1 2]
+        ]
+        setxy (min-pxcor + random world-width) (by + stripe)
       ]
-      set x0 bx + lane
-      set y0 min-pycor + random world-height
-    ] [
-      ;; горизонтальный трафик
-      let c  random cols
-      let by min-pxcor + period * c
-      ifelse random 2 = 0 [
-        set heading 90
-        set lane    stripe-index - 1
-      ] [
-        set heading 270
-        set lane    stripe-index + 1
+
+      ;; базовые свойства
+      set wait_time 0
+      set color     blue
+      set size      2
+
+      ;; ---------------- проверка: стоим ли НА ДОРОГЕ? -------------
+      if not ([is-road?] of patch-here and not [is-intersection?] of patch-here) [
+        die                                           ;; рамка или трава → удалить
       ]
-      set x0 min-pxcor + random world-width
-      set y0 by + lane
     ]
-
-    setxy x0 y0
-    set stripe       lane
-    set turn-chosen? false
-    set turn-angle   0
-    set turn-steps   0
-    set wait_time    0
-    set color        blue
-    set size         2
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 8.  Автобусы (декорация)
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup-buses
   create-buses 3 [
     setxy random-xcor random-ycor
@@ -225,58 +240,70 @@ to setup-buses
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-to setup-traffic-lights
-  ask patches with [
-    is-intersection? and
-    ((pxcor - min-pxcor) mod period = stripe-index) and
-    ((pycor - min-pycor) mod period = stripe-index)
-  ] [
-    let cx pxcor
-    let cy pycor
-    ask patch cx (cy + 1) [
-      sprout-traffic_lights 1 [
-        set shape   "circle"
-        set size    1.2
-        set heading 0
-      ]
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 9.  Светофорный цикл
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to update-traffic-lights
+  set light-timer light-timer + 1
+  if light-timer > light-slider [
+    ifelse vertical-light-color = "green" [
+  set vertical-light-color   "red"
+  set horizontal-light-color "green"
+    ] [
+  set vertical-light-color   "green"
+  set horizontal-light-color "red"
     ]
-    ask patch cx (cy - 1) [
-      sprout-traffic_lights 1 [
-        set shape   "circle"
-        set size    1.2
-        set heading 180
-      ]
+    set light-timer 0
+  ]
+
+  ask traffic_lights [
+    if member? round heading [0 180] [
+      set color (ifelse-value vertical-light-color = "green" [ green ] [ red ])
     ]
-    ask patch (cx + 1) cy [
-      sprout-traffic_lights 1 [
-        set shape   "circle"
-        set size    1.2
-        set heading 90
-      ]
-    ]
-    ask patch (cx - 1) cy [
-      sprout-traffic_lights 1 [
-        set shape   "circle"
-        set size    1.2
-        set heading 270
-      ]
+    if member? round heading [90 270] [
+      set color (ifelse-value horizontal-light-color = "green" [ green ] [ red ])
     ]
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 10.  Движение машин – строго по полосе, без поворотов
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to update-cars
+  ask cars [
+
+    ;; 1. патч впереди
+    let ahead patch-ahead 1
+    if not [is-road?] of ahead [ stop ]
+
+    ;; 2. красный свет?
+    let sig one-of traffic_lights with [
+      distance myself < 7 and abs([heading] of myself - heading) < 10
+    ]
+    if (sig != nobody and [color] of sig = red) [
+      set wait_time wait_time + 1
+      stop
+    ]
+
+    ;; 3. едем
+    fd speed-slider
+  ]
+end
+
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;;; 11.  SETUP и GO
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup
   clear-all
-  set green-size    7
-  set road-width    5
-  set period        (green-size + road-width)
-  set stripe-index  2
 
-  ;; начальные значения (можно управлять слайдерами)
-  set speed-slider  0.1
-  set light-slider 3000
+  ;; геометрия
+  set green-size   7
+  set road-width   5
+  set period       (green-size + road-width)
+  set stripe-index 2
 
+
+  ;; строим город
   setup-roads
   block-some-roads
   make-border
@@ -290,145 +317,6 @@ to setup
   reset-ticks
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-to update-traffic-lights
-  set light-timer light-timer + 1
-  ifelse light-timer > light-slider [
-    ifelse vertical-light-color = "green" [
-      set vertical-light-color   "red"
-      set horizontal-light-color "green"
-    ] [
-      set vertical-light-color   "green"
-      set horizontal-light-color "red"
-    ]
-    set light-timer 0
-  ] [
-    ;; ждём
-  ]
-  ask traffic_lights [
-    ifelse member? round heading [0 180] [
-      ifelse vertical-light-color = "green" [
-        set color green
-      ] [
-        set color red
-      ]
-    ] [
-      ifelse member? round heading [90 270] [
-        ifelse horizontal-light-color = "green" [
-          set color green
-        ] [
-          set color red
-        ]
-      ] [
-        ;; ничего
-      ]
-    ]
-  ]
-end
-
-to update-cars
-  ask cars [
-
-    ;; ===== 1. Определяем, заехали ли на перекрёсток и ещё не выбирали поворот =====
-    ifelse (not turn-chosen?) [
-      ifelse [is-intersection?] of patch-here [
-        ;;  ── На первом патче перекрёстка выбираем направление ──
-        ifelse random 2 = 0 [
-          ;; ► Правый поворот — поворачиваем немедленно
-          set turn-angle  90
-          set turn-steps  0          ;; сразу поворачиваем
-        ] [
-          ;; ◄ Левый поворот — сначала 3 клетки прямо
-          set turn-angle -90
-          set turn-steps  3
-        ]
-        set turn-chosen? true
-      ] [
-        ;;  ещё не на перекрёстке → ничего не делаем
-      ]
-    ] [
-      ;;  turn уже выбран — логика ниже
-    ]
-
-
-    ;; ===== 2. Если поворот выбран, но ещё нужно проехать прямо =====
-    ifelse (turn-chosen? and turn-steps > 0) [
-      fd speed-slider
-      set turn-steps turn-steps - 1
-      stop                                 ;; завершаем текущий ход
-    ] [
-      ;; либо turn-steps = 0, либо поворота нет
-    ]
-
-
-    ;; ===== 3. Выполняем сам поворот, когда счётчик дошёл до нуля =====
-    ifelse (turn-chosen? and turn-steps = 0) [
-      let old-h heading
-      rt turn-angle                         ;; сам поворот
-
-      ;; --- корректируем положение в полосе ---
-      let px round xcor
-      let py round ycor
-      ifelse member? old-h [0 180] [
-        set xcor px + stripe                ;; ехали по вертикали → смещаем X
-      ] [
-        set ycor py + stripe                ;; ехали по горизонтали → смещаем Y
-      ]
-
-      ;; --- обновляем stripe для нового направления ---
-      ifelse member? old-h [0 180] [
-        ifelse turn-angle = 90 [
-          set stripe stripe-index - 1       ;; из вертикали в право → левый ряд
-        ] [
-          set stripe stripe-index + 1       ;; из вертикали влево → правый ряд
-        ]
-      ] [
-        ifelse turn-angle = 90 [
-          set stripe stripe-index - 1
-        ] [
-          set stripe stripe-index + 1
-        ]
-      ]
-
-      ;; --- завершаем поворот ---
-      set turn-chosen? false
-      fd speed-slider                       ;; сразу чуть проезжаем вперёд
-      stop
-    ] [
-      ;; либо поворота нет, либо ещё не пора
-    ]
-
-
-    ;; ===== 4. Обычное движение (с учётом светофора) =====
-    ifelse (not turn-chosen?) [
-      let ahead1 patch-ahead 1
-      ifelse [is-intersection?] of ahead1 [
-        ifelse [is-intersection?] of patch-here [
-          fd speed-slider                    ;; внутри перекрёстка едем свободно
-        ] [
-          ;; стоим на красный, если нужный светофор перед нами
-          let my-sig one-of traffic_lights with [
-            distance myself < 7 and abs([heading] of myself - heading) < 10
-          ]
-          ifelse (my-sig != nobody and [color] of my-sig = red) [
-            set wait_time wait_time + 1
-          ] [
-            fd speed-slider
-          ]
-        ]
-      ] [
-        fd speed-slider                      ;; обычная дорога
-      ]
-    ] [
-      ;; если turn‑chosen? = true, то либо уже повернули (stop в блоке 3),
-      ;; либо прошли шаг 2 и stop‑нули ход — сюда не попадём
-    ]
-  ]
-end
-
-
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to go
   update-traffic-lights
   update-cars
@@ -463,10 +351,10 @@ ticks
 30.0
 
 BUTTON
-1356
-15
-1419
-48
+1229
+24
+1292
+57
 GO!
 go
 T
@@ -480,10 +368,10 @@ NIL
 1
 
 BUTTON
-1455
-15
-1518
-48
+1328
+24
+1391
+57
 Setup
 setup
 NIL
@@ -497,10 +385,10 @@ NIL
 1
 
 MONITOR
-1590
-20
-1648
-65
+1226
+92
+1284
+137
 Timer
 light-timer
 17
@@ -508,15 +396,45 @@ light-timer
 11
 
 MONITOR
-1700
-20
-1758
-65
+1336
+92
+1394
+137
 Color
 vertical-light-color
 17
 1
 11
+
+SLIDER
+1218
+170
+1390
+203
+speed-slider
+speed-slider
+0.001
+0.02
+0.007
+0.001
+1
+NIL
+HORIZONTAL
+
+SLIDER
+1223
+245
+1395
+278
+light-slider
+light-slider
+1000
+15000
+3000.0
+1000
+1
+NIL
+HORIZONTAL
 
 @#$#@#$#@
 ## WHAT IS IT?
