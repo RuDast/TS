@@ -85,9 +85,6 @@ end
 
 to block-some-roads
   let num-blocks 24
-
-  ;; геометрия та же, что в setup-roads
-
   ;; центральные клетки сегментов между перекрёстками
   let centres patches with [
         is-road? and
