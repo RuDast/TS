@@ -83,7 +83,93 @@ to setup-roads
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+to block-some-roads
+  let num-blocks 24
+
+  ;; геометрия та же, что в setup-roads
+
+  ;; центральные клетки сегментов между перекрёстками
+  let centres patches with [
+        is-road? and
+        not is-intersection? and
+        ( (pxcor - min-pxcor) mod period = stripe-index or
+          (pycor - min-pxcor) mod period = stripe-index )
+  ]
+
+  let chosen n-of (min list num-blocks count centres) centres
+
+  ask chosen [
+
+    let vertical? ( (pxcor - min-pxcor) mod period = stripe-index )
+
+    ;; ─────────────────── В Е Р Т И К А Л Ь ───────────────────
+    if vertical? [
+      let x0       pxcor - stripe-index                  ;; левый край дороги
+
+      ;; вершина / низ – последний не-перекрёсточный ряд
+      let y-top    pycor
+      while [ not [ is-intersection? ] of patch pxcor (y-top + 1) ] [
+        set y-top y-top + 1
+      ]
+      let y-bottom pycor
+      while [ not [ is-intersection? ] of patch pxcor (y-bottom - 1) ] [
+        set y-bottom y-bottom - 1
+      ]
+
+      ;; ВАЖНО: >=  и <=  (включаем граничные ряды!)
+      ask patches with [
+            pxcor >= x0                and pxcor <  x0 + road-width and
+            pycor >= y-bottom          and pycor <= y-top           and
+            is-road?                   and not is-intersection?
+      ] [
+        set is-road? false
+        set pcolor  green
+      ]
+    ]
+
+    ;; ───────────────── Г О Р И З О Н Т А Л Ь ─────────────────
+    if not vertical? [
+      let y0       pycor - stripe-index                  ;; нижний край дороги
+
+      let x-right  pxcor
+      while [ not [ is-intersection? ] of patch (x-right + 1) pycor ] [
+        set x-right x-right + 1
+      ]
+      let x-left   pxcor
+      while [ not [ is-intersection? ] of patch (x-left - 1) pycor ] [
+        set x-left x-left - 1
+      ]
+
+      ask patches with [
+            pycor >= y0                and pycor <  y0 + road-width and
+            pxcor >= x-left            and pxcor <= x-right         and
+            is-road?                   and not is-intersection?
+      ] [
+        set is-road? false
+        set pcolor  green
+      ]
+    ]
+  ]
+end
+
+to make-border
+  let border-width 12
+  ;; все патчи, которые лежат в «рамке» шириной border-width
+  ask patches with [
+        pxcor <= (min-pxcor + border-width - 1) or
+        pxcor >= (max-pxcor - border-width + 1) or
+        pycor <= (min-pycor + border-width - 1) or
+        pycor >= (max-pycor - border-width + 1)
+  ] [
+    ;; это больше не дорога и не перекрёсток
+    set is-road?         false
+    set is-intersection? false
+
+    ;; перекрашиваем в траву
+    set pcolor green
+  ]
+end
+
 to setup-cars
   let n    40
   let cols floor (world-width  / period)
@@ -195,6 +281,8 @@ to setup
   set light-slider 3000
 
   setup-roads
+  block-some-roads
+  make-border
   setup-traffic-lights
   setup-buses
   setup-cars
@@ -353,8 +441,8 @@ end
 GRAPHICS-WINDOW
 0
 15
-1189
-1205
+1190
+1206
 -1
 -1
 6.0
@@ -415,7 +503,7 @@ MONITOR
 1590
 20
 1648
-66
+65
 Timer
 light-timer
 17
@@ -426,7 +514,7 @@ MONITOR
 1700
 20
 1758
-66
+65
 Color
 vertical-light-color
 17
