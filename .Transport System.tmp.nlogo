@@ -1,7 +1,4 @@
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 1.  Breeds и «собственные» переменные
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-breed [ cars            car ]
+breed [ cars car ]
 
 breed [ traffic_lights  traffic_light ]
 
@@ -19,11 +16,10 @@ patches-own [
 ]
 
 
-traffic_lights-own  [ tl-group ]          ;; ← группа 0 … (g-1)
+traffic_lights-own  [
+  tl-group
+]
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 2.  globals  (speed-slider / light-slider – слайдеры)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 globals [
   vertical-light-color
   horizontal-light-color
@@ -34,13 +30,10 @@ globals [
   period
   stripe-index
 
-  group-delay                         ;; сдвиг = light-slider / groups-slider
+  group-delay
   safe-distance
 ]
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 3.  Сетка дорог 5 × 5
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup-roads
   ask patches [
     set pcolor           green
@@ -58,7 +51,8 @@ to setup-roads
       set is-road? true
       set pcolor   gray + 2
     ]
-    if vertical? and horizontal? [ set is-intersection? true ]
+    if vertical? and horizontal? [
+      set is-intersection? true ]
 
     if not is-intersection? [
       if vertical?   and mx = stripe-index [ if (abs pycor) mod 2 = 0 [ set pcolor white ] ]
@@ -67,9 +61,7 @@ to setup-roads
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 4.  Закрываем 11 участ­ков дорог
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 to block-some-roads
   let num-blocks 11
   let centres patches with [
@@ -94,7 +86,8 @@ to block-some-roads
         pxcor >= x0 and pxcor < x0 + road-width and
         pycor >= y-bot and pycor <= y-top and
         is-road? and not is-intersection?
-      ] [
+      ]
+      [
         set is-road? false
         set pcolor   green
       ]
@@ -110,7 +103,8 @@ to block-some-roads
         pycor >= y0 and pycor < y0 + road-width and
         pxcor >= xl and pxcor <= xr and
         is-road? and not is-intersection?
-      ] [
+      ]
+      [
         set is-road? false
         set pcolor   green
       ]
@@ -118,9 +112,7 @@ to block-some-roads
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 5.  Зелёная рамка
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
 to make-border
   let border-width (5 + green-size)
   ask patches with [
@@ -128,29 +120,28 @@ to make-border
         pxcor >= max-pxcor - border-width + 1 or
         pycor <= min-pycor + border-width - 1 or
         pycor >= max-pycor - border-width + 1
-  ] [
+  ]
+  [
     set is-road?         false
     set is-intersection? false
     set pcolor           green
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 6.  Светофоры
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to setup-traffic-lights
   ask patches with [
     is-intersection? and
     ((pxcor - min-pxcor) mod period = stripe-index) and
     ((pycor - min-pycor) mod period = stripe-index)
-  ] [
-    let grp random groups-slider              ;; группа ЭТОГО перекрёстка
+  ]
+  [
+    let grp random groups-slider
     let cx pxcor
     let cy pycor
-    make-tl cx (cy + 1)   0   grp             ;; север
-    make-tl cx (cy - 1) 180  grp             ;; юг
-    make-tl (cx + 1) cy   90  grp             ;; восток
-    make-tl (cx - 1) cy  270  grp             ;; запад
+    make-tl cx (cy + 1)   0   grp
+    make-tl cx (cy - 1) 180  grp
+    make-tl (cx + 1) cy   90  grp
+    make-tl (cx - 1) cy  270  grp
   ]
 end
 
@@ -160,7 +151,7 @@ to make-tl [ x y dir g ]
       set shape   "circle"
       set size    1.2
       set heading dir
-      set tl-group g                      ;; тот же grp у всех 4 ламп
+      set tl-group g
     ]
   ]
 end
@@ -174,14 +165,12 @@ to-report check-turn-options
   let can-go-left? false
   let can-go-u-turn? false
 
-  ;; Проверка движения прямо: дорога должна быть через 10 клеток
   let straight-x current-x + delta-x-from-heading current-heading 10
   let straight-y current-y + delta-y-from-heading current-heading 10
   if patch straight-x straight-y != nobody and [is-road?] of patch straight-x straight-y [
     set can-go-straight? true
   ]
 
-  ;; Проверка поворота направо
   let right-heading (current-heading + 90) mod 360
   let right-check-x current-x + delta-x-from-heading current-heading 2 + delta-x-from-heading right-heading 10
   let right-check-y current-y + delta-y-from-heading current-heading 2 + delta-y-from-heading right-heading 10
@@ -189,7 +178,6 @@ to-report check-turn-options
     set can-go-right? true
   ]
 
-  ;; Проверка поворота налево
   let left-heading (current-heading - 90) mod 360
   let left-check-x current-x + delta-x-from-heading current-heading 2 + delta-x-from-heading left-heading 10
   let left-check-y current-y + delta-y-from-heading current-heading 2 + delta-y-from-heading left-heading 10
@@ -197,8 +185,6 @@ to-report check-turn-options
     set can-go-left? true
   ]
 
-  ;; Проверка разворота: нужно проверить, что можно проехать 3 клетки вперёд,
-  ;; затем повернуть влево, проехать ещё 3 клетки, и повернуть влево снова
   let u-turn-first-x current-x + delta-x-from-heading current-heading 3
   let u-turn-first-y current-y + delta-y-from-heading current-heading 3
   let u-turn-second-heading (current-heading - 90) mod 360
@@ -220,79 +206,61 @@ to-report choose-turn-with-check
   let available-options (list can-go-straight? can-go-right? can-go-left?)
   let num-available length filter [x -> x] available-options
 
-  ;; Отладочный вывод доступных направлений
-  print (word "Car " who " options: straight=" can-go-straight? " right=" can-go-right? " left=" can-go-left? " u-turn=" can-go-u-turn?)
 
-  ;; Если все три направления заблокированы, но разворот возможен, возвращаем "u-turn"
+
+
   if num-available = 0 and can-go-u-turn? [
-    print (word "Car " who " chose: u-turn")
     report "u-turn"
   ]
 
-  ;; Если ни одно направление, включая разворот, недоступно, возвращаем "none"
+
   if num-available = 0 and not can-go-u-turn? [
-    print (word "Car " who " chose: none")
     report "none"
   ]
 
   let r random 100
   if num-available = 1 [
     if can-go-straight? [
-      print (word "Car " who " chose: straight")
       report "straight"
     ]
     if can-go-right? [
-      print (word "Car " who " chose: right")
       report "right"
     ]
     if can-go-left? [
-      print (word "Car " who " chose: left")
       report "left"
     ]
   ]
 
   if num-available = 2 [
-    ;; Если доступно движение прямо, оно имеет приоритет (90% вероятность)
     if can-go-straight? [
       if can-go-right? [
         if r < 50 [
-          print (word "Car " who " chose: straight")
           report "straight"
         ]
-        print (word "Car " who " chose: right")
         report "right"
       ]
       if can-go-left? [
         if r < 50 [
-          print (word "Car " who " chose: straight")
           report "straight"
         ]
-        print (word "Car " who " chose: left")
         report "left"
       ]
     ]
-    ;; Если движение прямо недоступно, выбор между поворотами равновероятен
     if not can-go-straight? and can-go-right? and can-go-left? [
       if r < 50 [
-        print (word "Car " who " chose: right")
         report "right"
       ]
-      print (word "Car " who " chose: left")
       report "left"
     ]
   ]
 
-  ;; Если доступны все три направления, движение прямо имеет приоритет (90% вероятность)
   if num-available = 3 [
     if r < 40 [
-      print (word "Car " who " chose: straight")
       report "straight"
     ]
     if r < 70 [
-      print (word "Car " who " chose: right")
       report "right"
     ]
-    print (word "Car " who " chose: left")
     report "left"
   ]
 end
@@ -304,14 +272,11 @@ to-report choose-turn
   report "right"
 end
 
-;;; -----------------------------------------------------------------
-;;; 7.  Спавн машин
-;;; -----------------------------------------------------------------
+
 to setup-cars
   ask cars [ die ]
-  let target 40  ; ← Значение по умолчанию
+  let target 40
 
-  ; Проверяем значение из текстового поля
   if is-number? num-cars-input and num-cars-input > 0 [
     set target num-cars-input
   ]
@@ -319,25 +284,27 @@ to setup-cars
   let cols floor (world-width  / period)
   let rows floor (world-height / period)
 
-  while [ count cars < target ] [
+  while [ count cars < target ]
+  [
     create-cars 1 [
       ifelse random 2 = 0 [
-        ;; вертикаль
         let c  random cols
         let bx (min-pxcor + period * c) + stripe-index
         ifelse random 2 = 0 [
           set heading 0  set stripe one-of [1 2]
-        ] [
+        ]
+        [
           set heading 180 set stripe (0 - (one-of [1 2]))
         ]
         setxy (bx + stripe) (min-pycor + random world-height)
-      ] [
-        ;; горизонталь
+      ]
+      [
         let r  random rows
         let by (min-pycor + period * r) + stripe-index
         ifelse random 2 = 0 [
           set heading 90  set stripe (0 - (one-of [1 2]))
-        ] [
+        ]
+        [
           set heading 270 set stripe one-of [1 2]
         ]
         setxy (min-pxcor + random world-width) (by + stripe)
@@ -355,52 +322,40 @@ to setup-cars
   ]
 end
 
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 8.  Автобусы (декорация)
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 9.  Светофорный цикл с учётом групп
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
 to update-traffic-lights
-  tick                                       ;; один шаг глобального времени
+  tick
 
-  let full (2 * light-slider)                ;; полный цикл "NS + EW"
+  let full (2 * light-slider)
 
   ask traffic_lights [
-    ;; фазовый сдвиг = группа × (light-slider / g)
     let local (ticks - tl-group * group-delay)
-
     ifelse ( (local mod full) < light-slider ) [
-      ;; первая половина цикла: NS зелёный
       if member? round heading [0 180] [ set color green ]
       if member? round heading [90 270] [ set color red   ]
-    ] [
-      ;; вторая половина: EW зелёный
+    ]
+    [
       if member? round heading [0 180] [ set color red   ]
       if member? round heading [90 270] [ set color green ]
     ]
   ]
 end
 
-;; -----------------------------------------------------------------
-;; Новая версия выбора поворота: тестовый, с приоритетом направо
 to-report choose-turn-test
   let r random 100
-  if r < 30    [ report "right" ]   ;; 70% — вправо
-  if r < 70   [ report "straight" ];; 20% — прямо
+  if r < 30    [ report "right" ]
+  if r < 70   [ report "straight" ]
   if r < 101    [ report "left" ]
-  report "u-turn"                    ;; 10% — влево
+  report "u-turn"
 end
 
 to-report check-car-ahead [dist]
   let car-ahead nobody
   let min-dist dist
-  ask cars with [self != myself] [  ;; Исключаем саму машину из проверки
-    if abs (heading - [heading] of myself) < 10 [  ;; Проверяем машины, движущиеся в том же направлении
+  ask cars with [self != myself]
+  [
+    if abs (heading - [heading] of myself) < 10 [
       let d distance myself
-      if d <= dist and d > 0 and (heading = [heading] of myself) [  ;; Машина в том же направлении
-        ;; Проверяем, находится ли другая машина впереди
+      if d <= dist and d > 0 and (heading = [heading] of myself) [
         let my-heading [heading] of myself
         let my-x [xcor] of myself
         let my-y [ycor] of myself
@@ -408,11 +363,11 @@ to-report check-car-ahead [dist]
         let other-y ycor
         let is-ahead? false
 
-        ;; Проверяем, впереди ли другая машина, в зависимости от направления движения
-        if my-heading = 0   and other-y > my-y [ set is-ahead? true ]  ;; Движение на север
-        if my-heading = 90  and other-x > my-x [ set is-ahead? true ]  ;; Движение на восток
-        if my-heading = 180 and other-y < my-y [ set is-ahead? true ]  ;; Движение на юг
-        if my-heading = 270 and other-x < my-x [ set is-ahead? true ]  ;; Движение на запад
+
+        if my-heading = 0   and other-y > my-y [ set is-ahead? true ]
+        if my-heading = 90  and other-x > my-x [ set is-ahead? true ]
+        if my-heading = 180 and other-y < my-y [ set is-ahead? true ]
+        if my-heading = 270 and other-x < my-x [ set is-ahead? true ]
 
         if is-ahead? and d < min-dist [
           set min-dist d
@@ -426,10 +381,8 @@ end
 
 to update-cars
   ask cars [
-    ;; Инициализируем is-moving? как false
     set is-moving? false
 
-    ;; Сброс флага поворота при выходе с перекрёстка
     if not [is-intersection?] of patch-here [
       set turned? false
     ]
@@ -440,54 +393,53 @@ to update-cars
       distance myself < 7 and abs ([heading] of myself - heading) < 10
     ]
 
-    ;; Проверка наличия машины впереди
     let ahead-info check-car-ahead (speed-slider + safe-distance)
     let car-ahead item 0 ahead-info
     let dist-to-car item 1 ahead-info
 
     ifelse [is-intersection?] of patch_after [
-      ;; Выбор направления один раз
       ifelse turn = "none" [
         set turn choose-turn-with-check
-        ;; Отладочный вывод выбранного направления
-        print (word "Car " who " chose: " turn)
-      ] [ ]
-
-      ;; Стоим на красный или если впереди машина слишком близко
+      ]
+      [ ]
       ifelse (my_signal != nobody and [color] of my_signal = red and not [is-intersection?] of patch-here) or
              (car-ahead != nobody and dist-to-car <= safe-distance) [
         set wait_time wait_time + 1
-        set is-moving? false  ;; Машина стоит
-      ] [
-        ;; Выполняем поворот/движение только если ещё не повернули
+        set is-moving? false
+      ]
+      [
         ifelse (turn = "right" and not turned?) [
           let dest patch-ahead (speed-slider + 1)
           if dest != nobody [ move-to dest ]
           right 90
           set turned? true
           set turn "none"
-          set is-moving? true  ;; Машина движется
-        ] [
+          set is-moving? true
+        ]
+        [
           ifelse (turn = "straight" and not turned?) [
             let dest patch-ahead (speed-slider + 1)
             ifelse dest != nobody and [is-road?] of dest and (car-ahead = nobody or dist-to-car > safe-distance) [
               move-to dest
               set turned? true
               set turn "none"
-              set is-moving? true  ;; Машина движется
-            ] [
-              set wait_time wait_time + 1
-              set is-moving? false  ;; Машина стоит
+              set is-moving? true
             ]
-          ] [
+            [
+              set wait_time wait_time + 1
+              set is-moving? false
+            ]
+          ]
+          [
             ifelse (turn = "left" and not turned?) [
               let dest patch-ahead (speed-slider + 4)
               if dest != nobody [ move-to dest ]
               left 90
               set turned? true
               set turn "none"
-              set is-moving? true  ;; Машина движется
-            ] [
+              set is-moving? true
+            ]
+            [
               ifelse (turn = "u-turn" and not turned?) [
                 left 90
                 ifelse can-move? 3 and (car-ahead = nobody or dist-to-car > safe-distance) [
@@ -495,33 +447,36 @@ to update-cars
                   left 90
                   set turned? true
                   set turn "none"
-                  set is-moving? true  ;; Машина движется
-                ] [
-                  set wait_time wait_time + 1
-                  set is-moving? false  ;; Машина стоит
+                  set is-moving? true
                 ]
-              ] [
-                ;; Если уже повернули или turn = "none", просто движемся вперёд
+                [
+                  set wait_time wait_time + 1
+                  set is-moving? false
+                ]
+              ]
+              [
                 ifelse [is-road?] of patch_in_front and (car-ahead = nobody or dist-to-car > safe-distance) [
                   fd speed-slider
-                  set is-moving? true  ;; Машина движется
-                ] [
+                  set is-moving? true
+                ]
+                [
                   set wait_time wait_time + 1
-                  set is-moving? false  ;; Машина стоит
+                  set is-moving? false
                 ]
               ]
             ]
           ]
         ]
       ]
-    ] [
-      ;; Движение вне перекрёстка
+    ]
+    [
       ifelse [is-road?] of patch_in_front and (car-ahead = nobody or dist-to-car > safe-distance) [
         fd speed-slider
-        set is-moving? true  ;; Машина движется
-      ] [
+        set is-moving? true
+      ]
+      [
         set wait_time wait_time + 1
-        set is-moving? false  ;; Машина стоит
+        set is-moving? false
       ]
       set turn "none"
     ]
@@ -543,9 +498,8 @@ to-report delta-y-from-heading [ h dist ]
   if h = 270 [ report 0 ]
   report 0
 end
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
-;;; 11.  SETUP и GO
-;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+
+
 to setup
   clear-all
 
@@ -571,7 +525,7 @@ to setup
 end
 
 to go
-
+  if ticks >= 3000 [ stop]
   update-traffic-lights
   update-cars
 end
@@ -672,7 +626,7 @@ light-slider
 light-slider
 6000
 72000
-12000.0
+6000.0
 6000
 1
 NIL
